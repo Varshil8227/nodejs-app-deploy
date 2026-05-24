@@ -1,0 +1,50 @@
+name: Eventora CI/CD Pipeline
+
+on:
+  push:
+    branches: [production]
+  pull_request:
+    types: [closed]
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag like v1.0.0'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  frontend-test:
+    name: "🧪 Job 2 — Frontend Build Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "📥 Code Checkout"
+        uses: actions/checkout@v4
+
+      - name: "⚙️ Node.js 20 Setup"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: "📦 Client Dependencies Install"
+        working-directory: client
+        run: npm ci
+
+      - name: "🏗️ Vite Production Build"
+        working-directory: client
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: "🔍 Build Output Check"
+        working-directory: client
+        run: |
+          test -d dist \
+            && echo "✅ dist folder created" \
+            || (echo "❌ dist missing" && exit 1)
+          test -f dist/index.html \
+            && echo "✅ index.html found" \
+            || (echo "❌ index.html missing" && exit 1)
