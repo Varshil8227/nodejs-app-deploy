@@ -15,7 +15,7 @@ on:
 
 jobs:
     test-client:
-    name: "CI — Frontend Build Verification"
+    name: "CI — Frontend Built Verification"
     runs-on: ubuntu-latest
     
     defaults:
