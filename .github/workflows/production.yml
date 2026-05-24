@@ -2,10 +2,10 @@ name: Eventora CI/CD Pipeline
 
 on:
   push:
-    branches: [production]
+    branches: [main]
   pull_request:
     types: [closed]
-    branches: [production]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
