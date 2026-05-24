@@ -76,7 +76,7 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           PORT: 5000
-          VITE_API_URL=http://localhost:5000
+          VITE_API_URL: "http://localhost:5000"
 
       - name: "Validate Application Architecture"
         run: |
