@@ -71,8 +71,10 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
-          MONGO_URI: ${{ secrets.MONGO_URI_TEST }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           PORT: 5000
 
       - name: "Validate Application Architecture"
