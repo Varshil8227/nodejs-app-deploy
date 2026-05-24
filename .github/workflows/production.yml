@@ -3,48 +3,40 @@ name: Eventora CI/CD Pipeline
 on:
   push:
     branches: [main]
+    tags:
+      - 'v1.*' # જ્યારે પણ v1.0.0, v1.1.0 જેવા ટેગ પુશ થાય ત્યારે આ ટ્રિગર થશે
   pull_request:
     types: [closed]
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag like v1.0.0'
-        required: true
-        default: 'v1.0.0'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # ==========================================
+  # CI STAGE: કોડ પુશ કે ટેગ પુશ બંને વખતે ટેસ્ટ રન થશે
+  # ==========================================
   test-client:
     name: "CI — Frontend Built Verification"
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    
     defaults:
       run:
         working-directory: client
-
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
-
       - name: "Configure Node.js Environment"
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
-
       - name: "Install Dependencies"
         run: npm ci
-
       - name: "Compile Application Assets"
         run: npm run build
         env:
           VITE_API_URL: ${{ secrets.PRODUCTION_VITE_API_URL }}
-
       - name: "Validate Distribution Artifacts"
         run: |
           [ -d "dist" ] && echo "✅ Artifact distribution directory verified." || { echo "❌ Critical Error: 'dist' build directory missing."; exit 1; }
@@ -53,43 +45,42 @@ jobs:
   test-server:
     name: "CI — Backend Server Verification"
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-
     defaults:
       run:
         working-directory: server
-
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
-
       - name: "Configure Node.js Environment"
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: server/package-lock.json
-
       - name: "Install Production Dependencies"
         run: npm ci --legacy-peer-deps
-
       - name: "Validate Node.js Code Syntax"
         run: |
           if [ -f "index.js" ]; then node --check index.js; fi
           if [ -f "app.js" ]; then node --check app.js; fi
           if [ -f "server.js" ]; then node --check server.js; fi
           echo "✅ Backend syntax verification completed successfully."
-
       - name: "Validate Application Architecture"
         run: |
           [ -f "package.json" ] && echo "✅ Manifest package.json verified." || { echo "❌ Critical Error: 'package.json' missing."; exit 1; }
           { [ -f "index.js" ] || [ -f "app.js" ] || [ -f "server.js" ]; } && echo "✅ Application entrypoint verified." || { echo "❌ Critical Error: Node.js entrypoint file missing."; exit 1; }
 
+  # ==========================================
+  # CD STAGE: આ જોબ ફક્ત ત્યારે જ ચાલશે જ્યારે ગિટ ટેગ પુશ થયો હોય
+  # ==========================================
   build-and-push:
-    name: "Build & Push Docker Images"
+    name: "CD — Build & Push Docker Images"
     needs: [test-client, test-server]
     runs-on: ubuntu-24.04
-    environment: production
+    # ⚠️ ગેટ કન્ડિશન: જો પુશ થયેલી વસ્તુ ગિટ ટેગ હોય, તો જ આગળ વધશે, નોર્મલ પુશ વખતે આ આખો જોબ સ્કીપ થઈ જશે
+    if: startsWith(github.ref, 'refs/tags/v1.')
+    environment: production # ગિટહબ અહીં રોકાઈને તમારી પાસે અપ્રૂવલ માગશે
+    
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -101,16 +92,13 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }} # નવો જનરેટ કરેલો Read-Write ટોકન અહીં કામ કરશે
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: "Set Version Tag"
-        id: vars
+      - name: "Extract Version from Git Tag"
+        id: get_version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          fi
+          # github.ref માંથી 'refs/tags/v1.0.0' માંથી ફક્ત 'v1.0.0' અલગ કાઢશે
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: "Build and Push Client Image"
         uses: docker/build-push-action@v5
@@ -119,7 +107,7 @@ jobs:
           file: ./client/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/eventora-client:${{ steps.vars.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/eventora-client:${{ steps.get_version.outputs.tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/eventora-client:latest
           build-args: |
             VITE_API_URL=${{ secrets.PRODUCTION_VITE_API_URL }}
@@ -131,10 +119,8 @@ jobs:
           file: ./server/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/eventora-server:${{ steps.vars.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/eventora-server:${{ steps.get_version.outputs.tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/eventora-server:latest
-
-
 # name: Eventora CI/CD Pipeline
 
 # on:
